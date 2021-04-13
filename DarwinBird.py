@@ -144,7 +144,7 @@ def crossover(p1, p2):
     p1_hidden_W = p1.hidden_layer.W
     p1_hidden_b = p1.hidden_layer.bias.reshape(len(p1.hidden_layer.bias), 1)
     p1_hidden = np.append(p1_hidden_W, p1_hidden_b, axis=1)
-    hidden_shape = np.shape(p1_hidden)  # also save the shape of the hidden layer (same for both all birds)
+    hidden_shape = np.shape(p1_hidden)  # also save the shape of the hidden layer
     p1_hidden = np.ndarray.flatten(p1_hidden)  # flatten the matrix for crossover
 
     # Repeat for parent 2
@@ -695,6 +695,12 @@ def start_menu():
 
 
 def pause_menu():
+    """
+    When called, this function will display the pause menu, which will remain
+    until the user decides to resume, restart or quit the game.
+    
+    :return: True if the restart option was selected, else False. (Boolean)
+    """
 
     pause_surface = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
     pygame.display.set_caption('Darwin Bird')
@@ -755,10 +761,11 @@ def pause_menu():
 
 def main():
 
+    # Game loop
     while True:
-
+        
         restart = False
-
+        
         bird_stats_df = None
         fig = None
         graph1 = None
@@ -789,7 +796,7 @@ def main():
             birds.append(new_bird)
 
 
-        # Game Loop (Each loop simulates one generation)
+        # Generation Loop (each loop represents one generation in the game)
         while not restart:
 
             pygame.init()
@@ -797,7 +804,8 @@ def main():
             pygame.display.set_caption('Darwin Bird')
             gen_font = pygame.font.SysFont(None, 32, bold=True)
             display_font = pygame.font.SysFont(None, 24, bold=True)
-
+            
+            # Display a standby screen while simulating/pre-training generations
             if sim_length > 0:
                 display_surface.fill((255, 255, 255))
                 simulation_text1 = display_font.render(
@@ -823,6 +831,8 @@ def main():
 
             # Frame by frame Loop
             while alive_count > 0:
+                
+                # Check for keyboard input.
                 if sim_length < 1:
                     for e in pygame.event.get():
                         if e.type == QUIT or (e.type == KEYUP and e.key == K_ESCAPE):
@@ -837,24 +847,27 @@ def main():
                     for e in pygame.event.get():
                         if e.type == KEYUP and e.key == K_SPACE:
                             sim_length = 0
-
+                
+                
                 if restart:
+                    # This will return the program to the start menu.
                     break
 
-                # Calculations for pipe pairs between frames
-                # Iterate over a copy of pipes because we are removing items from the list
+                # Calculations for pipe pairs between frames.
+                # Iterate over a copy of pipes because we are removing items from the list.
                 for pipe in pipes[:]:
-
+                    
+                    # Move the pipe pair to the left and update its coordinates.
                     pipe.center_x -= FRAME_ANIMATION_WIDTH
                     pipe.calc_coords()
 
-                    # Count the score for the generation if at least one bird makes it past
+                    # Count the score for the generation if at least one bird makes it past.
                     if pipe.x2 < BIRD_X - BIRD_RADIUS and not pipe.score_counted:
                         gen_score += 1
                         best_score = max(gen_score, best_score)
                         pipe.score_counted = True
 
-                    # Remove a pipe when it is no longer on screen
+                    # Remove a pipe when it is no longer on screen.
                     if pipe.x2 < 0:
                         pipes.remove(pipe)
                         continue
