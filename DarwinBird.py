@@ -5,6 +5,7 @@ import pygame
 from pygame.locals import *
 import pandas as pd
 import matplotlib.pyplot as plt
+import sys
 
 FRAME_ANIMATION_WIDTH = 3      # pixels per frame
 FRAME_BIRD_DROP_HEIGHT = 2     # pixels per frame
@@ -15,6 +16,7 @@ WIN_HEIGHT = 512
 PIPE_WIDTH = 60
 BIRD_RADIUS = 16
 BIRD_X = 50
+
 
 # Defines a perceptron layer to be used in the feed forward neural network of
 # a Bird object.
@@ -54,7 +56,6 @@ class PerceptronLayer(object):
             )
 
         self.m, self.n = np.shape(self.W)
-
 
     def forward(self, inputs):
         """
@@ -128,6 +129,7 @@ def natural_selection(population):
         cum_sum += bird.distance
         if cum_sum / total_fitness >= selector:
             return bird
+
 
 # Step 2 of the genetic algorithm.
 def crossover(p1, p2):
@@ -248,11 +250,10 @@ def mutation(child, p, n, step_size):
                 selector = random.randrange(0, len(child.output_layer.bias))
                 child.output_layer.bias[selector] += rnorm()
 
-
     return child
 
 
-# Represents a pipe pair obstacle that birds need to pass through to gain a point.
+# Represents a pipe pair obstacle that birds need to pass through.
 class PipePair:
 
     def __init__(self):
@@ -608,7 +609,6 @@ def start_menu():
     plot_button = MenuButton(b_x, plot_y, b_width, b_height, plot_text)
     quit_button = MenuButton(b_x, quit_y, b_width, b_height, quit_text)
 
-
     # The loop that contains the logic for the menu
     while in_menu:
 
@@ -628,6 +628,7 @@ def start_menu():
 
             if e.type == pygame.QUIT:
                 pygame.quit()
+                sys.exit(0)
             if e.type == pygame.MOUSEBUTTONDOWN:
 
                 # Start Button
@@ -737,6 +738,7 @@ def pause_menu():
 
             if e.type == pygame.QUIT:
                 pygame.quit()
+                sys.exit(0)
 
             # Pause key (Space bar)
             if e.type == KEYUP and e.key == K_SPACE:
@@ -759,287 +761,239 @@ def pause_menu():
         pygame.display.update()
 
 
-def main():
+# Game loop
+while True:
 
-    # Game loop
-    while True:
-        
-        restart = False
-        
-        bird_stats_df = None
-        fig = None
-        graph1 = None
-        graph2 = None
+    restart = False
 
-        pop_size, p_mut, sim_length, plot = start_menu()
+    bird_stats_df = None
+    fig = None
+    graph1 = None
+    graph2 = None
+    pop_size, p_mut, sim_length, plot = start_menu()
+    if plot:
+        bird_stats_df = pd.DataFrame(columns=["Generation",
+                                              "Score",
+                                              "Max Distance",
+                                              "Mean Distance"])
+        fig = plt.figure()
+        graph1 = fig.add_subplot(211)
+        graph2 = fig.add_subplot(212, sharex=graph1)
+    gen = 1
+    best_score = 0
+    # Create first generation of Birds
+    bird_colors = [random_color() for i in range(pop_size)]
+    birds = []
+    for col in bird_colors:
+        hidden_layer = PerceptronLayer(m=6, n=4)
+        output_layer = PerceptronLayer(m=1, n=6)
+        new_bird = Bird(hidden_layer, output_layer, col)
+        new_bird.y = int(WIN_HEIGHT / 2 - BIRD_RADIUS)
+        birds.append(new_bird)
 
-        if plot:
-            bird_stats_df = pd.DataFrame(columns=["Generation",
-                                                  "Score",
-                                                  "Max Distance",
-                                                  "Mean Distance"])
-            fig = plt.figure()
-            graph1 = fig.add_subplot(211)
-            graph2 = fig.add_subplot(212, sharex=graph1)
+    # Generation Loop (each loop represents one generation in the game)
+    while not restart:
+        pygame.init()
+        display_surface = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
+        pygame.display.set_caption('Darwin Bird')
+        gen_font = pygame.font.SysFont(None, 32, bold=True)
+        display_font = pygame.font.SysFont(None, 24, bold=True)
 
-        gen = 1
-        best_score = 0
+        # Display a standby screen while simulating/pre-training generations
+        if sim_length > 0:
+            display_surface.fill((255, 255, 255))
+            simulation_text1 = display_font.render(
+                "Simulating " + str(sim_length) +
+                " more generations before animating.",
+                True, (0, 0, 0))
+            text_x = WIN_WIDTH/2 - simulation_text1.get_width()/2
+            text_y = WIN_HEIGHT/2 - simulation_text1.get_height()/2
+            display_surface.blit(simulation_text1, (text_x, text_y))
+            simulation_text2 = display_font.render(
+                "Press [SPACEBAR] to begin animation now.",
+                True, (0, 0, 0))
+            text_x = WIN_WIDTH/2 - simulation_text2.get_width()/2
+            text_y = WIN_HEIGHT - 2*simulation_text2.get_height()
+            display_surface.blit(simulation_text2, (text_x, text_y))
+            pygame.display.update()
 
-        # Create first generation of Birds
-        bird_colors = [random_color() for i in range(pop_size)]
-        birds = []
-        for col in bird_colors:
-            hidden_layer = PerceptronLayer(m=6, n=4)
-            output_layer = PerceptronLayer(m=1, n=6)
-            new_bird = Bird(hidden_layer, output_layer, col)
-            new_bird.y = int(WIN_HEIGHT / 2 - BIRD_RADIUS)
-            birds.append(new_bird)
+        gen_score = 0
+        alive_count = len(birds)
+        pipes = [PipePair()]
+        # Frame by frame Loop
+        while alive_count > 0:
 
-
-        # Generation Loop (each loop represents one generation in the game)
-        while not restart:
-
-            pygame.init()
-            display_surface = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-            pygame.display.set_caption('Darwin Bird')
-            gen_font = pygame.font.SysFont(None, 32, bold=True)
-            display_font = pygame.font.SysFont(None, 24, bold=True)
-            
-            # Display a standby screen while simulating/pre-training generations
-            if sim_length > 0:
+            # Check for keyboard input.
+            if sim_length < 1:
+                for e in pygame.event.get():
+                    if e.type == QUIT or (e.type == KEYUP and e.key == K_ESCAPE):
+                        pygame.quit()
+                        sys.exit(0)
+                    elif e.type == KEYUP and e.key in (K_PAUSE, K_p, K_SPACE):
+                        restart = pause_menu()
+                        if restart and plot:
+                            plt.close(fig)
                 display_surface.fill((255, 255, 255))
-                simulation_text1 = display_font.render(
-                    "Simulating " + str(sim_length) +
-                    " more generations before animating.",
-                    True, (0, 0, 0))
-                text_x = WIN_WIDTH/2 - simulation_text1.get_width()/2
-                text_y = WIN_HEIGHT/2 - simulation_text1.get_height()/2
-                display_surface.blit(simulation_text1, (text_x, text_y))
+            else:
+                for e in pygame.event.get():
+                    if e.type == KEYUP and e.key == K_SPACE:
+                        sim_length = 0
 
-                simulation_text2 = display_font.render(
-                    "Press [SPACEBAR] to begin animation now.",
-                    True, (0, 0, 0))
-                text_x = WIN_WIDTH/2 - simulation_text2.get_width()/2
-                text_y = WIN_HEIGHT - 2*simulation_text2.get_height()
-                display_surface.blit(simulation_text2, (text_x, text_y))
+            if restart:
+                # This will return the program to the start menu.
+                break
+            # Calculations for pipe pairs between frames.
+            # Iterate over a copy of pipes because we are
+            # removing items from the list.
+            for pipe in pipes[:]:
 
-                pygame.display.update()
-
-            gen_score = 0
-            alive_count = len(birds)
-            pipes = [PipePair()]
-
-            # Frame by frame Loop
-            while alive_count > 0:
-                
-                # Check for keyboard input.
+                # Move the pipe pair to the left and update its coordinates.
+                pipe.center_x -= FRAME_ANIMATION_WIDTH
+                pipe.calc_coords()
+                # Count the score for the generation if at least one
+                # bird makes it past.
+                if pipe.x2 < BIRD_X - BIRD_RADIUS and not pipe.score_counted:
+                    gen_score += 1
+                    best_score = max(gen_score, best_score)
+                    pipe.score_counted = True
+                # Remove a pipe when it is no longer on screen.
+                if pipe.x2 < 0:
+                    pipes.remove(pipe)
+                    continue
                 if sim_length < 1:
-                    for e in pygame.event.get():
-                        if e.type == QUIT or (e.type == KEYUP and e.key == K_ESCAPE):
-                            pygame.quit()
-                        elif e.type == KEYUP and e.key in (K_PAUSE, K_p, K_SPACE):
-                            restart = pause_menu()
-                            if restart and plot:
-                                plt.close(fig)
+                    pipe.draw_pipes(display_surface)
 
-                    display_surface.fill((255, 255, 255))
-                else:
-                    for e in pygame.event.get():
-                        if e.type == KEYUP and e.key == K_SPACE:
-                            sim_length = 0
-                
-                
-                if restart:
-                    # This will return the program to the start menu.
-                    break
+            # Add a new pipe when the last pipe crosses halfway
+            # through the screen.
+            # This method of adding new pipes is not robust to changes in the
+            # WIN_WIDTH constant.
+            if len(pipes) == 1 and pipes[0].x1 == WIN_WIDTH / 2:
+                pipes.append(PipePair())
+            elif len(pipes) > 1 and pipes[1].x1 == WIN_WIDTH / 2:
+                pipes.append(PipePair())
 
-                # Calculations for pipe pairs between frames.
-                # Iterate over a copy of pipes because we are removing items from the list.
-                for pipe in pipes[:]:
-                    
-                    # Move the pipe pair to the left and update its coordinates.
-                    pipe.center_x -= FRAME_ANIMATION_WIDTH
-                    pipe.calc_coords()
-
-                    # Count the score for the generation if at least one bird makes it past.
-                    if pipe.x2 < BIRD_X - BIRD_RADIUS and not pipe.score_counted:
-                        gen_score += 1
-                        best_score = max(gen_score, best_score)
-                        pipe.score_counted = True
-
-                    # Remove a pipe when it is no longer on screen.
-                    if pipe.x2 < 0:
-                        pipes.remove(pipe)
+            # Calculations for birds between frames
+            for bird in birds:
+                if bird.alive:
+                    # Calculate bird y position
+                    if bird.steps_to_jump > 0:
+                        bird.y -= int(
+                            get_frame_jump_height(BIRD_JUMP_STEPS - bird.steps_to_jump))
+                        bird.steps_to_jump -= 1
+                    # Birds do not start falling until the first pipe appears
+                    elif len(pipes) > 0:
+                        bird.y += FRAME_BIRD_JUMP_HEIGHT
+                    # Check if bird is still in bounds (center within display)
+                    if bird.y < 0 or bird.y > WIN_HEIGHT:
+                        bird.alive = False
+                        alive_count -= 1
                         continue
-
+                    # There should only ever be 2 pipes to iterate over so this
+                    # is a simpler solution than keeping track of the next
+                    # incoming pipe pair with some pointer or queue.
+                    for pipe in pipes:
+                        if pipe.x2 + BIRD_RADIUS >= BIRD_X:
+                            collision = check_collision(bird, pipe)
+                            if collision:
+                                bird.alive = False
+                                alive_count -= 1
+                                break
+                    # No need to calculate the rest if the bird is dead
+                    if not bird.alive:
+                        continue
+                    # Bird can't double jump
+                    if bird.steps_to_jump < 1:
+                        # Check if bird wants to flap
+                        if len(pipes) > 0 and pipes[0].x2 + BIRD_RADIUS >= BIRD_X:
+                            if bird.flap(pipes[0].x2, pipes[0].y_top, pipes[0].y_bot):
+                                bird.steps_to_jump = BIRD_JUMP_STEPS
+                        elif len(pipes) > 1:
+                            if bird.flap(pipes[1].x2, pipes[1].y_top, pipes[1].y_bot):
+                                bird.steps_to_jump = BIRD_JUMP_STEPS
                     if sim_length < 1:
-                        pipe.draw_pipes(display_surface)
+                        pygame.draw.circle(display_surface, bird.color,
+                                           (BIRD_X, bird.y), BIRD_RADIUS)
+                    # Bird distance measured in how many pixels it traverses
+                    # (imagining the bird as moving and pipes as stationary)
+                    bird.distance += FRAME_ANIMATION_WIDTH
 
+            # Display text on screen about the state of the game, only when not
+            # pre-training/simulating
+            if sim_length < 1:
+                gen_surface = gen_font.render(
+                    "Generation: " + str(gen), True, (0, 0, 0))
+                gen_x = WIN_WIDTH/2 - gen_surface.get_width()/2
+                display_surface.blit(gen_surface, (gen_x, BIRD_RADIUS))
+                score_color = (0, 0, 0)
+                # Make the color of the score text green with new high score.
+                if gen_score == best_score and best_score != 0:
+                    score_color = (0, 255, 0)
+                gen_score_surface = display_font.render(
+                    "Generation Score: " + str(gen_score), True, score_color)
+                display_surface.blit(
+                    gen_score_surface, (BIRD_X, WIN_HEIGHT - 32))
+                best_score_surface = display_font.render(
+                    "Best Score: " + str(best_score), True, score_color)
+                display_surface.blit(
+                    best_score_surface, (WIN_WIDTH - 160, WIN_HEIGHT - 32))
+                birds_left_surface = display_font.render(
+                    "Birds Left: " + str(alive_count), True, (0, 0, 0))
+                birds_left_x = WIN_WIDTH / 2 - birds_left_surface.get_width() / 2
+                display_surface.blit(
+                    birds_left_surface, (birds_left_x, 3*BIRD_RADIUS))
+                pygame.display.update()
+            # Prints some information about the state
+            # of the game to the console.
+            print("\r| Generation: " + str(gen) +
+                  "| Birds Left: " + str(alive_count) +
+                  "| Score: " + str(gen_score) +
+                  "| Best Score: " + str(best_score),
+                  end="", flush=True)
 
-                # Add a new pipe when the last pipe crosses halfway through the screen.
-                # This method of adding new pipes is not robust to changes in the
-                # WIN_WIDTH constant.
-                if len(pipes) == 1 and pipes[0].x1 == WIN_WIDTH / 2:
-                    pipes.append(PipePair())
-                elif len(pipes) > 1 and pipes[1].x1 == WIN_WIDTH / 2:
-                    pipes.append(PipePair())
+        # Generation is complete, now for calculations between generations
 
+        # Updates the plots every generation.
+        if plot:
+            gen_max_dist = max(bird.distance for bird in birds)
+            gen_mean_dist = np.mean([bird.distance for bird in birds])
+            bird_stats_df.loc[gen - 1] = [gen,
+                                          gen_score,
+                                          gen_max_dist,
+                                          gen_mean_dist]
+            score_graph(bird_stats_df, graph1)
+            distance_graph(bird_stats_df, graph2)
+            fig.tight_layout()
+            plt.style.use("fivethirtyeight")
+            plt.pause(0.00001)
+        # -- Genetic Algorithm Steps -- #
+        # The pool of possible parents will be the 20% best performing birds of
+        # the previous generation. These Birds will also automatically join the
+        # next generation
+        parent_birds = sorted(birds, key=lambda x: x.distance,
+                              reverse=True)[:int(0.2 * pop_size)]
+        # Fill the remaining 80% of the population with offspring from the
+        # selected parents
+        new_birds = []
+        for i in range(pop_size - len(parent_birds)):
+            # Sample 2 parents with replacement
+            parent1 = natural_selection(parent_birds)
+            parent2 = natural_selection(parent_birds)
+            # Mix the DNA of the parents to create a child
+            new_bird = crossover(parent1, parent2)
+            new_bird.y = int(WIN_HEIGHT/2 - BIRD_RADIUS)
+            new_bird.color = random_color()
+            # Mutate the child with probability p before adding it to the
+            # population. Number of mutations and step size are currently
+            # fixed at values that I found to work well, but I plan to add
+            # these to the parameters that the user can modify from the
+            # start menu.
+            new_birds.append(mutation(new_bird, p_mut, 5, 0.10))
+        # Reset the distance and living status of returning birds
+        for bird in parent_birds:
+            bird.distance = 0
+            bird.alive = True
+        birds = new_birds + parent_birds
+        gen += 1
+        if sim_length > 0:
+            sim_length -= 1
 
-                # Calculations for birds between frames
-                for bird in birds:
-                    if bird.alive:
-
-                        # Calculate bird y position
-                        if bird.steps_to_jump > 0:
-                            bird.y -= int(
-                                get_frame_jump_height(BIRD_JUMP_STEPS - bird.steps_to_jump))
-                            bird.steps_to_jump -= 1
-
-                        # Birds do not start falling until the first pipe appears
-                        elif len(pipes) > 0:
-                            bird.y += FRAME_BIRD_JUMP_HEIGHT
-
-                        # Check if bird is still in bounds (center within display)
-                        if bird.y < 0 or bird.y > WIN_HEIGHT:
-                            bird.alive = False
-                            alive_count -= 1
-                            continue
-
-                        # There should only ever be 2 pipes to iterate over so this
-                        # is a simpler solution than keeping track of the next
-                        # incoming pipe pair with some pointer or queue.
-                        for pipe in pipes:
-                            if pipe.x2 + BIRD_RADIUS >= BIRD_X:
-                                collision = check_collision(bird, pipe)
-                                if collision:
-                                    bird.alive = False
-                                    alive_count -= 1
-                                    break
-
-                        # No need to calculate the rest if the bird is dead
-                        if not bird.alive:
-                            continue
-
-                        # Bird can't double jump
-                        if bird.steps_to_jump < 1:
-                            # Check if bird wants to flap
-                            if len(pipes) > 0 and pipes[0].x2 + BIRD_RADIUS >= BIRD_X:
-                                if bird.flap(pipes[0].x2, pipes[0].y_top, pipes[0].y_bot):
-                                    bird.steps_to_jump = BIRD_JUMP_STEPS
-                            elif len(pipes) > 1:
-                                if bird.flap(pipes[1].x2, pipes[1].y_top, pipes[1].y_bot):
-                                    bird.steps_to_jump = BIRD_JUMP_STEPS
-
-                        if sim_length < 1:
-                            pygame.draw.circle(display_surface, bird.color,
-                                               (BIRD_X, bird.y), BIRD_RADIUS)
-
-                        # Bird distance measured in how many pixels it traverses
-                        # (imagining the bird as moving and pipes as stationary)
-                        bird.distance += FRAME_ANIMATION_WIDTH
-
-
-                # Display text on screen about the state of the game, only when not
-                # pre-training/simulating
-                if sim_length < 1:
-                    gen_surface = gen_font.render(
-                        "Generation: " + str(gen), True, (0, 0, 0))
-                    gen_x = WIN_WIDTH/2 - gen_surface.get_width()/2
-                    display_surface.blit(gen_surface, (gen_x, BIRD_RADIUS))
-
-                    score_color = (0, 0, 0)
-                    # Make the color of the score text green with new high score.
-                    if gen_score == best_score and best_score != 0:
-                        score_color = (0, 255, 0)
-
-                    gen_score_surface = display_font.render(
-                        "Generation Score: " + str(gen_score), True, score_color)
-                    display_surface.blit(
-                        gen_score_surface, (BIRD_X, WIN_HEIGHT - 32))
-
-                    best_score_surface = display_font.render(
-                        "Best Score: " + str(best_score), True, score_color)
-                    display_surface.blit(
-                        best_score_surface, (WIN_WIDTH - 160, WIN_HEIGHT - 32))
-
-                    birds_left_surface = display_font.render(
-                        "Birds Left: " + str(alive_count), True, (0, 0, 0))
-                    birds_left_x = WIN_WIDTH / 2 - birds_left_surface.get_width() / 2
-                    display_surface.blit(
-                        birds_left_surface, (birds_left_x, 3*BIRD_RADIUS))
-
-                    pygame.display.update()
-
-
-                # Prints some information about the state of the game to the console.
-                print("\r| Generation: " + str(gen) +
-                      "| Birds Left: " + str(alive_count) +
-                      "| Score: " + str(gen_score) +
-                      "| Best Score: " + str(best_score),
-                      end="", flush=True)
-
-
-            # -- Generation is complete, now for calculations between generations -- #
-
-            # Updates the plots every generation.
-            if plot:
-
-                gen_max_dist = max(bird.distance for bird in birds)
-                gen_mean_dist = np.mean([bird.distance for bird in birds])
-
-                bird_stats_df.loc[gen - 1] = [gen,
-                                              gen_score,
-                                              gen_max_dist,
-                                              gen_mean_dist]
-
-                score_graph(bird_stats_df, graph1)
-                distance_graph(bird_stats_df, graph2)
-                fig.tight_layout()
-                plt.style.use("fivethirtyeight")
-                plt.pause(0.00001)
-
-
-            # -- Genetic Algorithm Steps -- #
-
-            # The pool of possible parents will be the 20% best performing birds of
-            # the previous generation. These Birds will also automatically join the
-            # next generation
-            parent_birds = sorted(birds, key=lambda x: x.distance,
-                                  reverse=True)[:int(0.2 * pop_size)]
-
-            # Fill the remaining 80% of the population with offspring from the
-            # selected parents
-            new_birds = []
-            for i in range(pop_size - len(parent_birds)):
-
-                # Sample 2 parents with replacement
-                parent1 = natural_selection(parent_birds)
-                parent2 = natural_selection(parent_birds)
-
-                # Mix the DNA of the parents to create a child
-                new_bird = crossover(parent1, parent2)
-                new_bird.y = int(WIN_HEIGHT/2 - BIRD_RADIUS)
-                new_bird.color = random_color()
-
-                # Mutate the child with probability p before adding it to the
-                # population. Number of mutations and step size are currently
-                # fixed at values that I found to work well, but I plan to add
-                # these to the parameters that the user can modify from the
-                # start menu.
-                new_birds.append(mutation(new_bird, p_mut, 5, 0.10))
-
-            # Reset the distance and living status of returning birds
-            for bird in parent_birds:
-                bird.distance = 0
-                bird.alive = True
-
-            birds = new_birds + parent_birds
-
-            gen += 1
-
-            if sim_length > 0:
-                sim_length -= 1
-
-
-if __name__ == '__main__':
-    main()

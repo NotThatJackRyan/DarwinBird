@@ -32,7 +32,6 @@ Once the game starts, some basic metrics about each generation will be printed t
 * Matplotlib
 ## To-Do
 
-* Add an option in the pause menu to simulate a certian number of generations at any point.
+* Add an option in the pause menu to simulate a certain number of generations at any point.
 * Replace the existing plots with more useful/interesting metrics.
-* Fix a bug where the game throws an error when quitting.
 * Add buttons to allow the player to select the n and step_size values of the mutation function.
