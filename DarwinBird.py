@@ -7,9 +7,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import sys
 
-FRAME_ANIMATION_WIDTH = 3      # pixels per frame
-FRAME_BIRD_DROP_HEIGHT = 2     # pixels per frame
-FRAME_BIRD_JUMP_HEIGHT = 5     # pixels per frame
+FRAME_ANIMATION_WIDTH = 3      # ]
+FRAME_BIRD_DROP_HEIGHT = 2     # ] - pixels per frame
+FRAME_BIRD_JUMP_HEIGHT = 5     # ]
 BIRD_JUMP_STEPS = 25
 WIN_WIDTH = 600
 WIN_HEIGHT = 512
