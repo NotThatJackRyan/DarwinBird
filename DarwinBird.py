@@ -20,7 +20,7 @@ BIRD_X = 50
 
 # Defines a perceptron layer to be used in the feed forward neural network of
 # a Bird object.
-class PerceptronLayer(object):
+class PerceptronLayer:
 
     def __init__(self, W=None, m=None, n=None):
         """
@@ -69,7 +69,7 @@ class PerceptronLayer(object):
 
 
 # Represents a "bird" agent.
-class Bird(object):
+class Bird:
 
     def __init__(self, hidden_layer, output_layer, color):
         """
